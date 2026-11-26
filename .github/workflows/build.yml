@@ -25,15 +25,14 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-            - name: Installa Android SDK
+      - name: Installa Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Accetta licenze Android
         run: yes | sdkmanager --licenses
 
       - name: Prepara Android
-        run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Compila APK
         run: gradle assembleDebug
