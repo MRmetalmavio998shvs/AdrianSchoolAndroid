@@ -1,3 +1,4 @@
+
 package com.adrianschool.app
 
 import android.app.Activity
@@ -7,6 +8,12 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.*
 import android.text.InputType
+import org.json.JSONObject
+import java.net.CookieHandler
+import java.net.CookieManager
+import java.net.CookiePolicy
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : Activity() {
 
@@ -14,6 +21,10 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        CookieHandler.setDefault(
+            CookieManager(null, CookiePolicy.ACCEPT_ALL)
+        )
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -38,7 +49,8 @@ class MainActivity : Activity() {
 
         val email = EditText(this).apply {
             hint = "Email"
-            inputType = InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
         }
 
         val password = EditText(this).apply {
@@ -69,19 +81,104 @@ class MainActivity : Activity() {
         setContentView(layout)
 
         login.setOnClickListener {
-            if (email.text.isBlank() || password.text.isBlank()) {
+            val userEmail = email.text.toString().trim()
+            val userPassword = password.text.toString()
+
+            if (userEmail.isBlank() || userPassword.isBlank()) {
                 Toast.makeText(
                     this,
                     "Inserisci email e password",
                     Toast.LENGTH_SHORT
                 ).show()
-            } else {
-                Toast.makeText(
-                    this,
-                    "Schermata pronta! Collegamento al server da completare.",
-                    Toast.LENGTH_LONG
-                ).show()
+                return@setOnClickListener
             }
+
+            login.isEnabled = false
+            login.text = "ACCESSO IN CORSO..."
+
+            Thread {
+                var connection: HttpURLConnection? = null
+
+                try {
+                    connection = URL(
+                        "http://127.0.0.1:3000/api/auth/login"
+                    ).openConnection() as HttpURLConnection
+
+                    connection.requestMethod = "POST"
+                    connection.connectTimeout = 10000
+                    connection.readTimeout = 10000
+                    connection.doOutput = true
+                    connection.setRequestProperty(
+                        "Content-Type",
+                        "application/json"
+                    )
+
+                    val body = JSONObject().apply {
+                        put("email", userEmail)
+                        put("password", userPassword)
+                    }
+
+                    connection.outputStream.use {
+                        it.write(body.toString().toByteArray(Charsets.UTF_8))
+                    }
+
+                    val code = connection.responseCode
+
+                    val response = (
+                        if (code in 200..299) connection.inputStream
+                        else connection.errorStream
+                    ).bufferedReader().use { it.readText() }
+
+                    val result = JSONObject(response)
+
+                    if (code == 200) {
+                        val user = result.getJSONObject("user")
+                        val username = user.optString("username", "Utente")
+
+                        runOnUiThread {
+                            Toast.makeText(
+                                this,
+                                "Benvenuto, $username!",
+                                Toast.LENGTH_LONG
+                            ).show()
+
+                            subtitle.text = "Accesso effettuato: $username"
+                            login.text = "ACCESSO EFFETTUATO"
+                            login.isEnabled = false
+                        }
+                    } else {
+                        val message = result.optString(
+                            "error",
+                            "Errore durante l'accesso"
+                        )
+
+                        runOnUiThread {
+                            Toast.makeText(
+                                this,
+                                message,
+                                Toast.LENGTH_LONG
+                            ).show()
+
+                            login.text = "ACCEDI"
+                            login.isEnabled = true
+                        }
+                    }
+
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this,
+                            "Errore di connessione: ${e.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                        login.text = "ACCEDI"
+                        login.isEnabled = true
+                    }
+                } finally {
+                    connection?.disconnect()
+                }
+            }.start()
         }
     }
 }
